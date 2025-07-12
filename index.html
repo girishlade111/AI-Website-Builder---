@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Website Builder (नो-कोड वेबसाइट बिल्डर)</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons for beautiful icons -->
+    <script src="https://unpkg.com/lucide-react@0.378.0/dist/umd/lucide.min.js"></script>
+    
+    <!-- JSZip for creating .zip files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <!-- FileSaver.js for saving the zip file -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <style>
+        /* Custom styles for the app */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom scrollbar for a modern look */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        
+        #editor { width: 100%; height: 100%; }
+        .monaco-editor { border-radius: 0.5rem; }
+
+        /* Simple animation for the loader */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loader-spinner { animation: spin 1s linear infinite; }
+
+        /* Transitions for UI elements */
+        .view-screen, #side-prompt-container {
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+        }
+        .tab { transition: background-color 0.2s, color 0.2s; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white overflow-hidden h-screen flex">
+
+    <!-- Main Application Container -->
+    <div id="app" class="h-full flex flex-col flex-grow">
+
+        <!-- 1. Initial Prompt Screen -->
+        <div id="prompt-screen" class="view-screen flex flex-col items-center justify-center h-full p-4 text-center">
+            <div class="mb-4">
+                <i data-lucide="wand-sparkles" class="w-16 h-16 text-indigo-400"></i>
+            </div>
+            <h1 class="text-4xl md:text-5xl font-bold mb-2">AI Website Builder</h1>
+            <p class="text-gray-400 mb-8 max-w-2xl">Tumhala kashi website havi aahe te sanga. Ek portfolio, ek blog, ki ek product landing page? AI tumchyasathi code tayar karel.</p>
+            <div class="w-full max-w-3xl bg-gray-800 rounded-xl shadow-2xl p-2 flex items-center">
+                <textarea id="initial-prompt-input" class="w-full bg-transparent p-3 text-lg text-gray-200 placeholder-gray-500 focus:outline-none resize-none" rows="2" placeholder="उदा. 'एका फोटोग्राफरसाठी गडद थीम असलेली मॉडर्न पोर्टफोलिओ वेबसाइट बनवा...'"></textarea>
+                <button id="initial-generate-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300 flex items-center">
+                    <i data-lucide="zap" class="w-5 h-5 mr-2"></i>
+                    <span>Generate</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. Workspace Screen -->
+        <div id="workspace-screen" class="view-screen hidden h-full flex-col">
+            <!-- Header/Controls -->
+            <header class="bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 p-2 flex items-center justify-between flex-shrink-0">
+                <div class="flex items-center gap-4">
+                    <a href="#" id="home-btn" class="cursor-pointer">
+                        <h2 class="text-xl font-bold text-indigo-400 flex items-center gap-2"><i data-lucide="layout-template"></i>AI Builder</h2>
+                    </a>
+                    <button id="new-project-btn" class="text-gray-300 hover:text-white transition-colors flex items-center gap-2 bg-gray-800 px-3 py-1.5 rounded-md text-sm">
+                        <i data-lucide="file-plus-2" class="w-4 h-4"></i>
+                        New Project
+                    </button>
+                </div>
+                <button id="export-btn" class="bg-green-600 hover:bg-green-500 text-white font-bold py-1.5 px-4 rounded-md transition-colors duration-300 flex items-center gap-2 text-sm">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    Export Code
+                </button>
+            </header>
+            
+            <!-- Main Content Area (Tabs: Editor + Preview) -->
+            <main class="flex-grow flex flex-col h-[calc(100vh-57px)] p-2 gap-2">
+                <!-- Tab Navigation -->
+                <div class="flex-shrink-0">
+                    <div class="flex border-b border-gray-700">
+                        <button id="code-tab-btn" class="tab py-2 px-4 text-sm font-medium border-b-2 border-indigo-500 text-indigo-400 bg-gray-800 rounded-t-lg">Code Editor</button>
+                        <button id="preview-tab-btn" class="tab py-2 px-4 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white">Live Preview</button>
+                    </div>
+                </div>
+                <!-- Tab Content -->
+                <div class="flex-grow bg-gray-800 rounded-b-lg rounded-r-lg overflow-hidden">
+                    <div id="editor-container" class="h-full">
+                        <div id="editor" class="h-full"></div>
+                    </div>
+                    <div id="preview-container" class="hidden h-full">
+                        <iframe id="preview-iframe" class="w-full h-full bg-white border-0" sandbox="allow-scripts allow-same-origin"></iframe>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Side Prompt for Iterative Changes -->
+    <div id="side-prompt-container" class="hidden h-full bg-gray-900 border-l border-gray-700 flex-col p-4 w-full max-w-sm">
+        <h3 class="text-lg font-semibold mb-4 text-indigo-400">Website madhye badal kara</h3>
+        <p class="text-sm text-gray-400 mb-4">Kaay badal karaycha ahe te ithe sanga. Udaharanarth, "navigation bar madhye 'About Us' page add kara" kinva "contact form cha color change kara".</p>
+        <div class="flex-grow flex flex-col bg-gray-800 rounded-xl shadow-lg">
+            <textarea id="iterative-prompt-input" class="w-full bg-transparent p-3 text-base text-gray-200 placeholder-gray-500 focus:outline-none resize-none flex-grow" placeholder="Tumche badal ithe type kara..."></textarea>
+            <button id="iterative-generate-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 m-2 rounded-lg transition-colors duration-300 flex items-center justify-center">
+                <i data-lucide="zap" class="w-5 h-5 mr-2"></i>
+                <span>Update Website</span>
+            </button>
+        </div>
+    </div>
+
+
+    <!-- Loading Overlay -->
+    <div id="loader-overlay" class="hidden absolute inset-0 bg-gray-900/70 backdrop-blur-md flex flex-col items-center justify-center z-50">
+        <div class="w-16 h-16 border-4 border-t-indigo-500 border-gray-600 rounded-full loader-spinner"></div>
+        <p id="loader-text" class="mt-4 text-lg text-gray-300">AI tumchi website banavat aahe, krupaya thamba...</p>
+    </div>
+    
+    <!-- Message Modal -->
+    <div id="message-modal" class="hidden absolute inset-0 bg-gray-900/70 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 rounded-xl shadow-2xl p-8 max-w-md w-full text-center border border-red-500">
+            <i data-lucide="alert-triangle" class="w-16 h-16 text-red-500 mx-auto mb-4"></i>
+            <h3 class="text-2xl font-bold mb-2">Oops! Ek Samasya Aali.</h3>
+            <p id="error-message" class="text-gray-400 mb-6">Kahitari chukle. Krupaya punha prayatna kara.</p>
+            <button id="close-modal-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-lg transition-colors">Band Kara</button>
+        </div>
+    </div>
+
+    <!-- Monaco Editor Loader Script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <script>
+        // Configure Monaco Editor Loader
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+        
+        // This ensures that the main application logic runs only after Monaco Editor is fully loaded.
+        window.require(['vs/editor/editor.main'], function () {
+            
+            // Initialize Lucide Icons as soon as the DOM is ready.
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+
+            // DOM Element References
+            const promptScreen = document.getElementById('prompt-screen');
+            const workspaceScreen = document.getElementById('workspace-screen');
+            const sidePromptContainer = document.getElementById('side-prompt-container');
+            
+            const initialGenerateBtn = document.getElementById('initial-generate-btn');
+            const initialPromptInput = document.getElementById('initial-prompt-input');
+            const iterativeGenerateBtn = document.getElementById('iterative-generate-btn');
+            const iterativePromptInput = document.getElementById('iterative-prompt-input');
+
+            const codeTabBtn = document.getElementById('code-tab-btn');
+            const previewTabBtn = document.getElementById('preview-tab-btn');
+            const editorContainer = document.getElementById('editor-container');
+            const previewContainer = document.getElementById('preview-container');
+
+            const exportBtn = document.getElementById('export-btn');
+            const newProjectBtn = document.getElementById('new-project-btn');
+            const homeBtn = document.getElementById('home-btn'); // Added home button reference
+            const previewIframe = document.getElementById('preview-iframe');
+            
+            const loaderOverlay = document.getElementById('loader-overlay');
+            const loaderText = document.getElementById('loader-text');
+            const messageModal = document.getElementById('message-modal');
+            const errorMessage = document.getElementById('error-message');
+            const closeModalBtn = document.getElementById('close-modal-btn');
+
+            let monacoEditor;
+            let currentCode = { html: '', css: '', javascript: '' };
+
+            // --- Monaco Editor Setup ---
+            function initializeEditor(code) {
+                const editorDiv = document.getElementById('editor');
+                editorDiv.innerHTML = ''; // Clear previous instance
+                // Now 'monaco' is guaranteed to be defined here.
+                monacoEditor = monaco.editor.create(editorDiv, {
+                    value: code,
+                    language: 'html',
+                    theme: 'vs-dark',
+                    automaticLayout: true,
+                    minimap: { enabled: false },
+                    wordWrap: 'on',
+                    fontSize: 14,
+                    roundedSelection: false,
+                    scrollBeyondLastLine: false,
+                });
+
+                monacoEditor.onDidChangeModelContent(() => {
+                    currentCode.html = monacoEditor.getValue();
+                });
+            }
+
+            // --- Core Application Logic ---
+            function updatePreview() {
+                const combinedHtml = `
+                    <!DOCTYPE html><html lang="en">
+                    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>${currentCode.css}</style></head>
+                    <body>${currentCode.html}<script>${currentCode.javascript}<\/script></body>
+                    </html>`;
+                previewIframe.srcdoc = combinedHtml;
+            }
+
+            function updateWorkspace(newCode) {
+                currentCode = newCode;
+                if (monacoEditor) {
+                    monacoEditor.setValue(currentCode.html);
+                } else {
+                    initializeEditor(currentCode.html);
+                }
+                updatePreview();
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons(); // Re-render icons if any were added in the new code
+                }
+            }
+            
+            async function handleGeneration(prompt, isIterative = false) {
+                if (!prompt) {
+                    showError("Prompt rikami ahe. Krupaya vivaran dya.");
+                    return;
+                }
+
+                showLoader(true, isIterative ? "Website update hot aahe..." : "Tumchi website banavat aahe...");
+                
+                try {
+                    const generatedCode = await callGeminiAPI(prompt, isIterative ? currentCode : null);
+                    
+                    if (!isIterative) {
+                        showView('workspace');
+                    }
+                    
+                    setTimeout(() => {
+                        updateWorkspace(generatedCode);
+                        if (isIterative) {
+                            iterativePromptInput.value = '';
+                        }
+                    }, 100);
+
+                } catch (error) {
+                    console.error("API Call Failed:", error);
+                    showError(`API call madhye error aala: ${error.message}`);
+                } finally {
+                    showLoader(false);
+                }
+            }
+
+            // --- Gemini API Call ---
+            async function callGeminiAPI(prompt, existingCode = null) {
+                const apiKey = "AIzaSyDK68voN4wRnCh95nrlu0m9vHbtJKOECqM"; 
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                let fullPrompt;
+                if (existingCode && existingCode.html) { // Check if there is existing code to iterate on
+                    fullPrompt = `
+                        You are an expert web developer. Your task is to modify an existing website based on a user's request.
+                        Here is the current code of the website:
+                        Current HTML:
+                        \`\`\`html
+                        ${existingCode.html}
+                        \`\`\`
+                        Current CSS:
+                        \`\`\`css
+                        ${existingCode.css}
+                        \`\`\`
+                        Current JavaScript:
+                        \`\`\`javascript
+                        ${existingCode.javascript}
+                        \`\`\`
+                        Now, please apply the following change: "${prompt}"
+
+                        You MUST return the complete, updated website code in a single JSON object with three keys: "html", "css", and "javascript".
+                        Return only the raw JSON object.`;
+                } else {
+                    fullPrompt = `
+                        You are an expert web developer. Your task is to generate a complete, self-contained website based on the user's prompt.
+                        You MUST return the code in a single JSON object with three keys: "html", "css", and "javascript".
+                        - The "html" key should contain only the body content of the HTML.
+                        - The "css" key should contain all the necessary CSS.
+                        - The "javascript" key should contain all the necessary JavaScript.
+                        - Use modern design principles. You can use placeholder images from https://placehold.co if needed.
+                        - Do not include any explanations or markdown formatting in your response. Only the raw JSON object.
+                        User's prompt: "${prompt}"`;
+                }
+                
+                const payload = {
+                    contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: {
+                                "html": { "type": "STRING" },
+                                "css": { "type": "STRING" },
+                                "javascript": { "type": "STRING" }
+                            },
+                            required: ["html", "css", "javascript"]
+                        }
+                    }
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.text();
+                    throw new Error(`API request failed with status ${response.status}: ${errorBody}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    const jsonString = result.candidates[0].content.parts[0].text;
+                    return JSON.parse(jsonString);
+                } else {
+                    console.error("Unexpected API response structure:", result);
+                    throw new Error("API kadun code milala nahi. Response structure chukichi ahe.");
+                }
+            }
+
+            // --- UI and Event Handlers ---
+            function showView(viewName) {
+                promptScreen.classList.add('hidden');
+                workspaceScreen.classList.add('hidden');
+                sidePromptContainer.classList.add('hidden');
+
+                if (viewName === 'prompt') {
+                    promptScreen.classList.remove('hidden');
+                } else if (viewName === 'workspace') {
+                    workspaceScreen.classList.remove('hidden');
+                    sidePromptContainer.classList.remove('hidden');
+                }
+            }
+
+            function switchTab(tabName) {
+                if (tabName === 'code') {
+                    editorContainer.classList.remove('hidden');
+                    previewContainer.classList.add('hidden');
+                    codeTabBtn.classList.add('border-indigo-500', 'text-indigo-400', 'bg-gray-800');
+                    codeTabBtn.classList.remove('border-transparent', 'text-gray-400');
+                    previewTabBtn.classList.add('border-transparent', 'text-gray-400');
+                    previewTabBtn.classList.remove('border-indigo-500', 'text-indigo-400', 'bg-gray-800');
+                    if(monacoEditor) monacoEditor.layout();
+                } else {
+                    updatePreview();
+                    editorContainer.classList.add('hidden');
+                    previewContainer.classList.remove('hidden');
+                    previewTabBtn.classList.add('border-indigo-500', 'text-indigo-400', 'bg-gray-800');
+                    previewTabBtn.classList.remove('border-transparent', 'text-gray-400');
+                    codeTabBtn.classList.add('border-transparent', 'text-gray-400');
+                    codeTabBtn.classList.remove('border-indigo-500', 'text-indigo-400', 'bg-gray-800');
+                }
+            }
+
+            function handleExport() {
+                if (!monacoEditor) {
+                    showError("Export karnyakarita kahi code nahi.");
+                    return;
+                }
+                const zip = new JSZip();
+                const finalHtml = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Generated Website</title><link rel="stylesheet" href="style.css"></head><body>${monacoEditor.getValue()}<script src="script.js"><\/script></body></html>`;
+                zip.file("index.html", finalHtml);
+                zip.file("style.css", currentCode.css);
+                zip.file("script.js", currentCode.javascript);
+                zip.generateAsync({ type: "blob" }).then(content => saveAs(content, "website.zip"));
+            }
+
+            function handleNewProject() {
+                if (confirm("Tumhi nischit ahat? Current progress save honar nahi.")) {
+                    showView('prompt');
+                    initialPromptInput.value = '';
+                    iterativePromptInput.value = '';
+                    currentCode = { html: '', css: '', javascript: '' };
+                    if (monacoEditor) {
+                        monacoEditor.dispose();
+                        monacoEditor = null;
+                    }
+                }
+            }
+            
+            function showLoader(show, text = "Loading...") {
+                loaderText.innerText = text;
+                loaderOverlay.classList.toggle('hidden', !show);
+            }
+
+            function showError(message) {
+                errorMessage.innerText = message;
+                messageModal.classList.remove('hidden');
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+            }
+
+            // Event Listeners
+            initialGenerateBtn.addEventListener('click', () => handleGeneration(initialPromptInput.value.trim(), false));
+            iterativeGenerateBtn.addEventListener('click', () => handleGeneration(iterativePromptInput.value.trim(), true));
+            
+            codeTabBtn.addEventListener('click', () => switchTab('code'));
+            previewTabBtn.addEventListener('click', () => switchTab('preview'));
+
+            exportBtn.addEventListener('click', handleExport);
+            newProjectBtn.addEventListener('click', handleNewProject);
+            homeBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                handleNewProject();
+            });
+            closeModalBtn.addEventListener('click', () => messageModal.classList.add('hidden'));
+
+            // Initial setup
+            showView('prompt');
+        });
+    </script>
+</body>
+</html>
